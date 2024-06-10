@@ -1,0 +1,5 @@
+chromadb==0.5.0
+flask==3.0.3
+llama-index==0.10.37
+llama-index-embeddings-huggingface==0.2.0
+transformers==4.41.0

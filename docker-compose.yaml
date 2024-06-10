@@ -1,0 +1,9 @@
+services:
+  llm:
+    # image: flask-app
+    build: .
+    volumes:
+      - ./chroma:/chroma
+      - ./models:/models
+    ports:
+      - "5000:5000"
