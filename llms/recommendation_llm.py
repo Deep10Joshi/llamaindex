@@ -30,11 +30,11 @@ class RecommendationModel:
             model_name=self.EMBED_MODEL_NAME,
             text_instruction="Given are the offers we provide, where each offer is uniqely identified by its offering_id",
             query_instruction="Retrieve all the relevent offering_ids from the given query",
-            cache_folder="./models/embedding_models/"+str(hash(self.EMBED_MODEL_NAME))
+            cache_folder="./models/embedding_models/"+self.EMBED_MODEL_NAME
         )
 
 
-        self.CLASSIFIER_NAME = "facebook/bart-large-mnli"
+        self.CLASSIFIER_NAME = "MoritzLaurer/deberta-v3-base-zeroshot-v2.0"
         self.CLASSIFIER = pipeline(
             task="zero-shot-classification",
             model=self.CLASSIFIER_NAME,
@@ -44,7 +44,7 @@ class RecommendationModel:
             # model="MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"  # clothing for men
             # model="MoritzLaurer/deberta-v3-base-zeroshot-v2.0"    # current best  
         )
-        self.CLASSIFIER.save_pretrained(save_directory="./models/llm_models/"+str(hash(self.CLASSIFIER_NAME)))
+        self.CLASSIFIER.save_pretrained(save_directory="./models/llm_models/"+self.CLASSIFIER_NAME)
 
 
         # self.PERSIST_DIR = "./vector-indexes/" + str(self.EMBED_MODEL.model_name)
@@ -61,48 +61,6 @@ class RecommendationModel:
     def notifyMessage(self, text):
         print(f"\n{'='*20}{text}{'='*20} ")
 
-    # Classifier
-    def generateResponseFromClassifier(self, userPrompt:str, threshold=0.51):
-        self.TIME = time.time()
-        return_ans = {
-            "tags": [],
-            "subtags": []
-        }
-
-        offer_subtags_array = []
-
-        # Classify the userPrompt into Tags, and add their subtags.
-        tag_ans = self.CLASSIFIER(userPrompt, OFFER_TAGS_ARRAY, multi_label=True)
-        for label, score in zip(tag_ans['labels'], tag_ans['scores']):
-            if score >= threshold:
-                # Adding the tags to the answer
-                return_ans['tags'].append(label)
-
-                # Adding the subtags associated with the current tag into a temp array
-                offer_subtags_array += list(OFFER_TAG_SUBTAG_DICT[label])
-
-
-        # If the identified tags length is 0, then take all the subtags
-        if len(return_ans['tags']) == 0:
-            for tag in OFFER_TAGS_ARRAY:
-                offer_subtags_array += list(OFFER_TAG_SUBTAG_DICT[tag])
-                    
-        # If tags are identified, classify the userPrompt into subtags
-        if len(offer_subtags_array) > 0:
-            subtag_ans = self.CLASSIFIER(userPrompt, offer_subtags_array, multi_label=True)
-            for label, score in zip(subtag_ans['labels'], subtag_ans['scores']):
-                if score >= threshold:
-                    # Adding the subtags to the answer
-                    return_ans['subtags'].append(label)
-
-
-
-        self.notifyMessage("Classified in "+str(time.time()-self.TIME)+"s")
-        print("Classified Labels: ", return_ans)
-        return return_ans
-
-
-
     # Create stand alone ChromaDB vector store
     # Will recreate all the embeddings
     def createSimpleChromaDB(self):
@@ -116,9 +74,17 @@ class RecommendationModel:
             counter+=1
 
             curr_metadata = {"offering_id": "", "tag": "", "subtags": ""}
+            curr_node = {
+                "offering_id": i["offering_id"], 
+                "details": i["details"], 
+                "brand_name": i["brand_name"], 
+                "tag": json.dumps(i["tag"])
+            }
+
             curr_id = i["offering_id"]
             curr_metadata["offering_id"] = i["offering_id"]
-            json_str = json.dumps(i)
+            json_str = json.dumps(curr_node)
+
 
             curr_embeddings = self.EMBED_MODEL.get_text_embedding(json_str)
 
@@ -138,28 +104,76 @@ class RecommendationModel:
                 print("parsed ", counter, " nodes")
 
 
+
+    # Classifier
+    def generateResponseFromClassifier(self, userPrompt:str, threshold=0.51, use_tags=False):
+        self.TIME = time.time()
+        return_ans = {
+            "tags": [],
+            "subtags": []
+        }
+        offer_subtags_array = []
+
+        if use_tags:
+            # Classify the userPrompt into Tags, and add their subtags.
+            tag_ans = self.CLASSIFIER(userPrompt, OFFER_TAGS_ARRAY, multi_label=True)
+            for label, score in zip(tag_ans['labels'], tag_ans['scores']):
+                if score >= threshold:
+                    # Adding the tags to the answer
+                    return_ans['tags'].append(label)
+
+                    # Adding the subtags associated with the current tag into a temp array
+                    offer_subtags_array += list(OFFER_TAG_SUBTAG_DICT[label])
+
+
+        # If the identified tags length is 0, then take all the subtags
+        if len(return_ans['tags']) == 0:
+            offer_subtags_array = OFFER_SUBTAG_ARRAY
+                    
+        # If tags are identified, classify the userPrompt into subtags
+        if len(offer_subtags_array) > 0:
+            subtag_ans = self.CLASSIFIER(userPrompt, offer_subtags_array, multi_label=True)
+            for label, score in zip(subtag_ans['labels'], subtag_ans['scores']):
+                if score >= threshold:
+                    # Adding the subtags to the answer
+                    return_ans['subtags'].append(label)
+
+
+        self.notifyMessage("Classified in "+str(time.time()-self.TIME)+"s")
+        print("Classified Labels: ", return_ans)
+        return return_ans
+
+
     # Query the ChromaDB vector store
-    def querySimpleChromaDB(self, userPrompt, top_res=5):
+    def querySimpleChromaDB(self, userPrompt, top_res=5, use_tags=False):
         # self.notifyMessage("Querying ChromaDB")
         self.TIME = time.time()
 
         embedded_text = self.EMBED_MODEL.get_query_embedding(userPrompt)
-
-        classified_labels_dict = self.generateResponseFromClassifier(userPrompt)
-
+        classified_labels_dict = self.generateResponseFromClassifier(userPrompt, use_tags=use_tags)
         clause = {"$or": [
             
         ]}
 
-        if classified_labels_dict["tags"] != []:
-            clause["$or"].append({"tag": {"$in": classified_labels_dict["tags"]}})
-        if classified_labels_dict["subtags"] != []:
-            clause["$or"].append({"subtags": {"$in": classified_labels_dict["subtags"]}})
-        if len(clause["$or"])!=2:
-            clause = None
-            
-        print("clause:  ", clause)
+        if use_tags:
+            print("Using tags")
+            temp_clause = {}
+            if classified_labels_dict["tags"] != []:
+                clause["$or"].append({"tags": {"$in": classified_labels_dict["tags"]}})
+                temp_clause = {"tags": {"$in": classified_labels_dict["tags"]}}
+            if classified_labels_dict["subtags"] != []:
+                clause["$or"].append({"subtags": {"$in": classified_labels_dict["subtags"]}})
+                temp_clause = {"subtags": {"$in": classified_labels_dict["subtags"]}}
+            if len(clause["$or"])!=2:
+                clause = temp_clause
+                
+        else:
+            print("Using subtags")
+            clause = {"subtags": {"$in": classified_labels_dict["subtags"]}}
 
+
+        print("clause:  ", clause)
+        
         ans = self.CHROMA_COLLECTION.query(
             query_embeddings=[embedded_text],
             n_results=top_res,
@@ -191,7 +205,7 @@ if __name__ == "__main__":
             break
         
         print("Prompt: ", input_prompt)
-        id_array, docs_array = l.querySimpleChromaDB(input_prompt, 5)
+        id_array, docs_array = l.querySimpleChromaDB(input_prompt, 5, use_tags=True)
 
 
 

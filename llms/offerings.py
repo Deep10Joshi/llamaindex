@@ -43,3 +43,5 @@ OFFER_TAG_SUBTAG_DICT = {
 OFFER_BRAND_ARRAY=[
     
 ]
+
+OFFER_SUBTAG_ARRAY=['Chinese', 'Dine In', 'Desserts', 'QSR', 'Tea & Coffee', 'Others', 'Pizza & Sandwich', 'Burger & Biryani', 'Food Delivery ', 'Quick Bites', 'Shoes & Socks', 'Clothing (Men)', 'Jewellery', 'Ecommerce', 'Other', 'Indian Brands', 'Home Essentials', 'Eye wear', 'Clothing (Women)', 'Kids', 'Holiday Packages', 'Booking Websites', 'Hotels', 'Vehicle Rentals', 'Bus', 'Auto Cabs', 'SmartWatches', 'OTT', 'Music', 'Headphones', 'FM/Radio', 'Smartphones', 'Speakers', 'Skincare', 'Salon & Treatment', 'Other', 'Personal care', 'Haircare', 'Mens Grooming', 'Cosmetics', 'Mother & kids wear', 'Ayurveda', 'Spa', 'Handmade', 'Gifting', 'Chocolates', 'Customize Gifting', 'Flowers', 'Medicines', 'Fitness', 'Gym', 'Dental', 'Diabetes', 'Supplements', 'Weight Management', 'Lab Tests', 'Plants', 'Handmade', 'Others', 'Home Decor', 'Kids Education', 'Pets', 'Finance', '__Deals']

@@ -2,3 +2,4 @@ data/
 chroma/
 models/
 vector-indexes/
+__pycache__
